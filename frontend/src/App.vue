@@ -7,6 +7,8 @@
     const selectedImages = ref([]);
     const fileInput = ref(null);
     const imagePreviews = ref([]);
+    const selectedTasks = ref([]);
+    const uploadImages = ref([]);
 
     async function loadTasks() {
         try {
@@ -26,9 +28,9 @@
             formData.append("title", newTask.value);
             formData.append("done", false);
 
-            if (selectedImages.value.length > 0) {
-                for (let i = 0; i < selectedImages.value.length; i++) {
-                    formData.append("images[]", selectedImages.value[i]);
+            if (uploadImages.value.length > 0) {
+                for (let i = 0; i < uploadImages.value.length; i++) {
+                    formData.append("images[]", uploadImages.value[i]);
                 }
             }
 
@@ -39,7 +41,7 @@
             });
     
             newTask.value = "";
-            selectedImages.value = [];
+            uploadImages.value = [];
             imagePreviews.value = [];
 
             if (fileInput.value) {
@@ -73,13 +75,37 @@
     }
 
     function handleImages(event) {
-        selectedImages.value = event.target.files;
+        uploadImages.value = Array.from(event.target.files);
         imagePreviews.value = [];
-        for (let i = 0; i < selectedImages.value.length; i++) {
-            const file = selectedImages.value[i];
+        for (let i = 0; i < uploadImages.value.length; i++) {
+            const file = uploadImages.value[i];
             imagePreviews.value.push(
                 URL.createObjectURL(file)
             );
+        }
+    }
+
+    async function deleteSelectedTasks() {
+        try {
+            for (const taskId of selectedTasks.value) {
+                await axios.delete(`http://127.0.0.1:8000/api/tasks/${taskId}`);
+            }
+            selectedTasks.value = [];
+            loadTasks();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    async function deleteSelectedImages() {
+        try {
+            for (const imageId of selectedImages.value) {
+                await axios.delete(`http://127.0.0.1:8000/api/images/${imageId}`);
+            }
+            selectedImages.value = [];
+            loadTasks();
+        } catch (error) {
+            console.error(error);
         }
     }
 
@@ -109,9 +135,13 @@
 
         <ul v-else>
             <li v-for="task in tasks.filter(task => !task.done)" :key="task.id" style="margin-left: -25px;" >
+                <input type="checkbox" :value="task.id" v-model="selectedTasks"/>
                 {{ task.title }}
-                <div v-if="task.images.length > 0" style="display: flex; gap: 10px; margin-top: 10px;">
-                    <img v-for="image in task.images" :key="image.id" :src="'http://127.0.0.1:8000/storage/' + image.image" style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;"/>
+                <div v-if="task.images.length > 0" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+                    <div v-for="image in task.images" :key="image.id" style="display: flex; flex-direction: column; align-items: center;">
+                        <input type="checkbox" :value="image.id" v-model="selectedImages"/>
+                        <img :src="'http://127.0.0.1:8000/storage/' + image.image" style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;"/>
+                    </div>
                 </div>
                 <button @click="deleteTask(task.id)" style="margin-left: 10px;">
                     Deletar
@@ -130,11 +160,18 @@
 
         <ul v-else>
             <li v-for="task in tasks.filter(task => task.done)" :key="task.id" style="margin-left: -25px;">
+                <input type="checkbox" :value="task.id" v-model="selectedTasks"/>
                 {{ task.title }}
                 <button @click="deleteTask(task.id)" style="margin-left: 10px;">
                     Deletar
                 </button>
             </li>
         </ul>
+        <button @click="deleteSelectedTasks">
+            Deletar Tasks Selecionadas
+        </button>
+        <button @click="deleteSelectedImages">
+            Deletar Imagens
+        </button>
     </div>
 </template>

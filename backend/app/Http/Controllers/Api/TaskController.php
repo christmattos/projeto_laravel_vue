@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Task;
 use Illuminate\Http\Request;
 use App\Models\TaskImage;
+use Illuminate\Support\Facades\Storage;
 
 class TaskController extends Controller
 {
@@ -42,8 +43,18 @@ class TaskController extends Controller
 
     public function destroy($id)
     {
-        $task = Task::findOrFail($id);
+        $task = Task::with('images')->findOrFail($id);
+        foreach ($task->images as $image) {
+            Storage::disk('public')->delete($image->image);
+        }
         $task->delete();
         return response()->json(['message' => 'task deletada']);
+    }
+    public function deleteImage($id)
+    {
+        $image = TaskImage::findOrFail($id);
+        Storage::disk('public')->delete($image->image);
+        $image->delete();
+        return response()->json(['message' => 'imagem deletada']);
     }
 }
