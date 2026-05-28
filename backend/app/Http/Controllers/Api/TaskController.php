@@ -17,6 +17,12 @@ class TaskController extends Controller
 
     public function store(Request $request)
     {
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'done' => 'nullable|boolean',
+            'images.*' => 'image|mimes:jpg,jpeg,png,webp|max:2048'
+        ]);
+
         $task = Task::create([
             'title' => $request->title,
             'done' => false
@@ -31,13 +37,16 @@ class TaskController extends Controller
                 ]);
             }
         }
-    return response()->json($task->load('images'));
+    return response()->json($task->load('images'), 201);
     }
 
     public function update(Request $request, $id)
     {
         $task = Task::findOrFail($id);
-        $task->update($request->all());
+        $task->update([
+            'title' => $request->title,
+            'done' => $request->done
+        ]);
         return $task;
     }
 
@@ -45,7 +54,10 @@ class TaskController extends Controller
     {
         $task = Task::with('images')->findOrFail($id);
         foreach ($task->images as $image) {
-            Storage::disk('public')->delete($image->image);
+            if (Storage::disk('public')->exists($image->image)) {
+                Storage::disk('public')->delete($image->image);
+            }
+            $image->delete();
         }
         $task->delete();
         return response()->json(['message' => 'task deletada']);
@@ -53,7 +65,9 @@ class TaskController extends Controller
     public function deleteImage($id)
     {
         $image = TaskImage::findOrFail($id);
-        Storage::disk('public')->delete($image->image);
+        if (Storage::disk('public')->exists($image->image)) {
+            Storage::disk('public')->delete($image->image);
+        }
         $image->delete();
         return response()->json(['message' => 'imagem deletada']);
     }

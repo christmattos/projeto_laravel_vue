@@ -1,5 +1,5 @@
 <script setup>
-    import { ref, onMounted } from "vue";
+    import { ref, onMounted, computed } from "vue";
     import axios from "axios";
 
     const tasks = ref([]);
@@ -9,13 +9,14 @@
     const imagePreviews = ref([]);
     const selectedTasks = ref([]);
     const uploadImages = ref([]);
+    const pendingTasks = computed(() => tasks.value.filter(t => !t.done))
 
     async function loadTasks() {
         try {
             const response = await axios.get("http://127.0.0.1:8000/api/tasks");
             tasks.value = response.data;
         } catch (error) {
-            console.error(error);
+            console.log(error.response?.data);
         }
     }
     
@@ -26,7 +27,6 @@
         try {
             const formData = new FormData();
             formData.append("title", newTask.value);
-            formData.append("done", false);
 
             if (uploadImages.value.length > 0) {
                 for (let i = 0; i < uploadImages.value.length; i++) {
@@ -50,7 +50,7 @@
 
             loadTasks();
         } catch (error) {
-            console.error(error);
+            console.log(error.response?.data);
         }
     }
     
@@ -59,7 +59,7 @@
             await axios.delete(`http://127.0.0.1:8000/api/tasks/${id}`);
             loadTasks();
         } catch (error) {
-            console.error(error);
+            console.log(error.response?.data);
         }
     }
     
@@ -70,7 +70,7 @@
             });
             loadTasks();
         } catch (error) {
-            console.error(error);
+            console.log(error.response?.data);
         }
     }
 
@@ -87,13 +87,15 @@
 
     async function deleteSelectedTasks() {
         try {
-            for (const taskId of selectedTasks.value) {
-                await axios.delete(`http://127.0.0.1:8000/api/tasks/${taskId}`);
-            }
+            await Promise.all(
+                selectedTasks.value.map(id =>
+                axios.delete(`http://127.0.0.1:8000/api/tasks/${id}`)
+                )
+            )
             selectedTasks.value = [];
             loadTasks();
         } catch (error) {
-            console.error(error);
+            console.log(error.response?.data);
         }
     }
 
@@ -105,7 +107,7 @@
             selectedImages.value = [];
             loadTasks();
         } catch (error) {
-            console.error(error);
+            console.log(error.response?.data);
         }
     }
 
@@ -134,10 +136,10 @@
         </div>
 
         <ul v-else>
-            <li v-for="task in tasks.filter(task => !task.done)" :key="task.id" style="margin-left: -25px;" >
+            <li v-for="task in pendingTasks" :key="task.id" style="margin-left: -25px;" >
                 <input type="checkbox" :value="task.id" v-model="selectedTasks"/>
                 {{ task.title }}
-                <div v-if="task.images.length > 0" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+                <div v-if="task.images?.length > 0" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
                     <div v-for="image in task.images" :key="image.id" style="display: flex; flex-direction: column; align-items: center;">
                         <input type="checkbox" :value="image.id" v-model="selectedImages"/>
                         <img :src="'http://127.0.0.1:8000/storage/' + image.image" style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;"/>
