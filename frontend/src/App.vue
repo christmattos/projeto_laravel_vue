@@ -21,7 +21,6 @@
         if (newTask.value.trim() === "") {
             return;
         }
-    
         try {
             const formData = new FormData();
             formData.append("title", newTask.value);
@@ -96,13 +95,17 @@
         <div style="margin-bottom: 20px">
             <input v-model="newTask" placeholder="Digite uma task" style="margin-right: 10px"/>
             <input ref="fileInput" type="file" multiple @change="handleImages"/>
-            <button @click="createTask">Criar</button>
+            <button @click="createTask">
+                Criar
+            </button>
         </div>
         <div v-if="imagePreviews.length > 0" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
             <img v-for="(preview, index) in imagePreviews" :key="index" :src="preview" style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;"/>
         </div>
 
-        <div v-if="tasks.filter(task => !task.done).length === 0">Nenhuma task encontrada</div>
+        <div v-if="tasks.filter(task => !task.done).length === 0">
+            Nenhuma task encontrada
+        </div>
 
         <ul v-else>
             <li v-for="task in tasks.filter(task => !task.done)" :key="task.id" style="margin-left: -25px;" >
@@ -121,7 +124,9 @@
 
         <!-- aqui vai ficar o separador  -->
 
-        <div v-if="tasks.filter(task => task.done).length === 0">Nenhuma task concluída</div>
+        <div v-if="tasks.filter(task => task.done).length === 0">
+            Nenhuma task concluída
+        </div>
 
         <ul v-else>
             <li v-for="task in tasks.filter(task => task.done)" :key="task.id" style="margin-left: -25px;">
