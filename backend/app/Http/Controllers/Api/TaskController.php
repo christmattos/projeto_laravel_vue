@@ -5,12 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Task;
 use Illuminate\Http\Request;
+use App\Models\TaskImage;
 
 class TaskController extends Controller
 {
     public function index()
     {
-        return Task::all();
+        return Task::with('images')->get();
     }
 
     public function store(Request $request)
@@ -20,14 +21,22 @@ class TaskController extends Controller
             'done' => false
         ]);
 
-        return $task;
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $image) {
+                $path = $image->store('tasks', 'public');
+                TaskImage::create([
+                    'task_id' => $task->id,
+                    'image' => $path
+                ]);
+            }
+        }
+    return response()->json($task->load('images'));
     }
 
     public function update(Request $request, $id)
     {
         $task = Task::findOrFail($id);
         $task->update($request->all());
-
         return $task;
     }
 
@@ -35,7 +44,6 @@ class TaskController extends Controller
     {
         $task = Task::findOrFail($id);
         $task->delete();
-
         return response()->json(['message' => 'task deletada']);
     }
 }
