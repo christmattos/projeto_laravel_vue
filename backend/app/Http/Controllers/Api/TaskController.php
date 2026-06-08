@@ -42,12 +42,28 @@ class TaskController extends Controller
 
     public function update(Request $request, $id)
     {
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'images.*' => 'image|mimes:jpg,jpeg,png,webp|max:2048'
+        ]);
+
         $task = Task::findOrFail($id);
+
         $task->update([
             'title' => $request->title,
-            'done' => $request->done
+            'done' => $request->done ?? $task->done
         ]);
-        return $task;
+
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $image) {
+                $path = $image->store('tasks', 'public');
+                TaskImage::create([
+                    'task_id' => $task->id,
+                    'image' => $path
+                ]);
+            }
+        }
+        return response()->json($task->load('images'));
     }
 
     public function destroy($id)

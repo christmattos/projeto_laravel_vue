@@ -10,6 +10,9 @@
     const selectedTasks = ref([]);
     const uploadImages = ref([]);
     const pendingTasks = computed(() => tasks.value.filter(t => !t.done))
+    const editingTask = ref(null);
+    const editTitle = ref("");
+    const editImages = ref([]);
 
     async function loadTasks() {
         try {
@@ -111,6 +114,45 @@
         }
     }
 
+    function startEdit(task) {
+        editingTask.value = task.id;
+        editTitle.value = task.title;
+    }
+
+    function handleEditImages(event) {
+        editImages.value = Array.from(event.target.files);
+    }
+
+    async function saveEdit(taskId) {
+        try {
+            const formData = new FormData();
+
+            formData.append("title", editTitle.value);
+
+            for (const image of editImages.value) {
+                formData.append("images[]", image);
+            }
+
+            await axios.post(
+                `http://127.0.0.1:8000/api/tasks/${taskId}?_method=PUT`,
+                formData,
+                {
+                    headers: {
+                        "Content-Type": "multipart/form-data"
+                    }
+                }
+            );
+
+            editingTask.value = null;
+            editTitle.value = "";
+            editImages.value = [];
+
+            loadTasks();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
     onMounted(() => {
         loadTasks();
     });
@@ -138,7 +180,26 @@
         <ul v-else>
             <li v-for="task in pendingTasks" :key="task.id" style="margin-left: -25px;" >
                 <input type="checkbox" :value="task.id" v-model="selectedTasks"/>
-                {{ task.title }}
+                <template v-if="editingTask === task.id">
+                    <input v-model="editTitle" />
+                    <input
+                        type="file"
+                        multiple
+                        @change="handleEditImages"
+                    />
+                    <button @click="saveEdit(task.id)">
+                        Salvar
+                    </button>
+                    <button @click="editingTask = null">
+                        Cancelar
+                    </button>
+                </template>
+                <template v-else>
+                    {{ task.title }}
+                    <button @click="startEdit(task)">
+                        Editar
+                    </button>
+                </template>
                 <div v-if="task.images?.length > 0" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
                     <div v-for="image in task.images" :key="image.id" style="display: flex; flex-direction: column; align-items: center;">
                         <input type="checkbox" :value="image.id" v-model="selectedImages"/>
