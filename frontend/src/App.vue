@@ -1,28 +1,38 @@
 <script setup>
-    import { ref, onMounted, computed } from "vue";
+    import { ref, onMounted, computed, watch } from "vue";
     import axios from "axios";
+    import draggable from "vuedraggable";
+
+    const API_URL = "http://127.0.0.1:8000/api";
+    const STORAGE_URL = "http://127.0.0.1:8000/storage";
 
     const tasks = ref([]);
+    const draggedTasks = ref([]);
     const newTask = ref("");
     const selectedImages = ref([]);
     const fileInput = ref(null);
     const imagePreviews = ref([]);
     const selectedTasks = ref([]);
     const uploadImages = ref([]);
-    const pendingTasks = computed(() => tasks.value.filter(t => !t.done))
     const editingTask = ref(null);
     const editTitle = ref("");
     const editImages = ref([]);
+    const isReorderingTasks = ref(false);
+    const isReorderingImages = ref(false);
+
+    const pendingTasks = computed(() => tasks.value.filter(t => !t.done));
+    const completedTasks = computed(() => tasks.value.filter(t => t.done));
+
+    // Sincronizar draggedTasks com pendingTasks
+    watch(pendingTasks, (newVal) => {
+        draggedTasks.value = newVal;
+    }, { deep: true });
 
     async function loadTasks() {
-        try {
-            const response = await axios.get("http://127.0.0.1:8000/api/tasks");
-            tasks.value = response.data;
-        } catch (error) {
-            console.log(error.response?.data);
-        }
+        const response = await axios.get(`${API_URL}/tasks`);
+        tasks.value = response.data;
     }
-    
+
     async function createTask() {
         if (newTask.value.trim() === "") {
             return;
@@ -32,12 +42,10 @@
             formData.append("title", newTask.value);
 
             if (uploadImages.value.length > 0) {
-                for (let i = 0; i < uploadImages.value.length; i++) {
-                    formData.append("images[]", uploadImages.value[i]);
-                }
+                uploadImages.value.forEach(img => formData.append("images[]", img));
             }
 
-            await axios.post("http://127.0.0.1:8000/api/tasks", formData, {
+            await axios.post(`${API_URL}/tasks`, formData, {
                 headers: {
                     "Content-Type": "multipart/form-data"
                 }
@@ -59,58 +67,59 @@
     
     async function deleteTask(id) {
         try {
-            await axios.delete(`http://127.0.0.1:8000/api/tasks/${id}`);
-            loadTasks();
+            await axios.delete(`${API_URL}/tasks/${id}`);
+            tasks.value = tasks.value.filter(t => t.id !== id);
         } catch (error) {
             console.log(error.response?.data);
+            loadTasks();
         }
     }
     
     async function updateTask(id) {
         try {
-            await axios.put(`http://127.0.0.1:8000/api/tasks/${id}`, {
-                done: true
-            });
-            loadTasks();
+            await axios.put(`${API_URL}/tasks/${id}`, { done: true });
+            const task = tasks.value.find(t => t.id === id);
+            if (task) task.done = true;
         } catch (error) {
             console.log(error.response?.data);
+            loadTasks();
         }
     }
 
     function handleImages(event) {
         uploadImages.value = Array.from(event.target.files);
-        imagePreviews.value = [];
-        for (let i = 0; i < uploadImages.value.length; i++) {
-            const file = uploadImages.value[i];
-            imagePreviews.value.push(
-                URL.createObjectURL(file)
-            );
-        }
+        imagePreviews.value = uploadImages.value.map(file => URL.createObjectURL(file));
     }
 
     async function deleteSelectedTasks() {
         try {
             await Promise.all(
                 selectedTasks.value.map(id =>
-                axios.delete(`http://127.0.0.1:8000/api/tasks/${id}`)
+                axios.delete(`${API_URL}/tasks/${id}`)
                 )
             )
+            tasks.value = tasks.value.filter(t => !selectedTasks.value.includes(t.id));
             selectedTasks.value = [];
-            loadTasks();
         } catch (error) {
             console.log(error.response?.data);
+            loadTasks();
         }
     }
 
     async function deleteSelectedImages() {
         try {
-            for (const imageId of selectedImages.value) {
-                await axios.delete(`http://127.0.0.1:8000/api/images/${imageId}`);
-            }
+            await Promise.all(
+                selectedImages.value.map(imageId =>
+                axios.delete(`${API_URL}/images/${imageId}`)
+                )
+            )
+            tasks.value.forEach(t => {
+                t.images = t.images.filter(img => !selectedImages.value.includes(img.id));
+            });
             selectedImages.value = [];
-            loadTasks();
         } catch (error) {
             console.log(error.response?.data);
+            loadTasks();
         }
     }
 
@@ -129,12 +138,10 @@
 
             formData.append("title", editTitle.value);
 
-            for (const image of editImages.value) {
-                formData.append("images[]", image);
-            }
+            editImages.value.forEach(image => formData.append("images[]", image));
 
             await axios.post(
-                `http://127.0.0.1:8000/api/tasks/${taskId}?_method=PUT`,
+                `${API_URL}/tasks/${taskId}?_method=PUT`,
                 formData,
                 {
                     headers: {
@@ -150,6 +157,47 @@
             loadTasks();
         } catch (error) {
             console.error(error);
+        }
+    }
+
+    async function saveTaskOrder() {
+        if (isReorderingTasks.value) return
+        isReorderingTasks.value = true
+
+        const positions = draggedTasks.value.map((task, index) => ({
+            id: task.id,
+            position: index + 1
+        }))
+
+        try {
+            await axios.post(`${API_URL}/tasks/reorder`, { positions })
+        } catch (error) {
+            console.error(error.response?.data || error)
+            loadTasks()
+        } finally {
+            isReorderingTasks.value = false
+        }
+    }
+
+    async function saveImageOrder(task) {
+        if (isReorderingImages.value) return
+        isReorderingImages.value = true
+        
+        const positions = task.images.map((img, index) => ({
+            id: img.id,
+            task_id: task.id,
+            position: index + 1
+        }))
+
+        try {
+            await axios.post(`${API_URL}/images/reorder`, {
+                positions
+            });
+            await loadTasks();
+        } catch (error) {
+            console.error(error.response?.data || error)
+        } finally {
+            isReorderingImages.value = false
         }
     }
 
@@ -173,56 +221,98 @@
             <img v-for="(preview, index) in imagePreviews" :key="index" :src="preview" style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;"/>
         </div>
 
-        <div v-if="tasks.filter(task => !task.done).length === 0">
+        <div v-if="pendingTasks.length === 0">
             Nenhuma task encontrada
         </div>
 
-        <ul v-else>
-            <li v-for="task in pendingTasks" :key="task.id" style="margin-left: -25px;" >
-                <input type="checkbox" :value="task.id" v-model="selectedTasks"/>
-                <template v-if="editingTask === task.id">
-                    <input v-model="editTitle" />
-                    <input
-                        type="file"
-                        multiple
-                        @change="handleEditImages"
-                    />
-                    <button @click="saveEdit(task.id)">
-                        Salvar
+        <draggable
+            v-model="draggedTasks"
+            item-key="id"
+            :disabled="isReorderingTasks"
+            @change="saveTaskOrder"
+        >
+            <template #item="{ element: task }">
+                <li style="margin-left: -25px; margin-bottom: 10px;">
+
+                    <!-- seleção -->
+                    <input type="checkbox" :value="task.id" v-model="selectedTasks"/>
+
+                    <!-- EDIT MODE -->
+                    <template v-if="editingTask === task.id">
+                        <input v-model="editTitle" />
+
+                        <input
+                            type="file"
+                            multiple
+                            @change="handleEditImages"
+                        />
+
+                        <button @click="saveEdit(task.id)">
+                            Salvar
+                        </button>
+
+                        <button @click="editingTask = null">
+                            Cancelar
+                        </button>
+                    </template>
+
+                    <!-- VIEW MODE -->
+                    <template v-else>
+                        {{ task.title }}
+
+                        <button @click="startEdit(task)">
+                            Editar
+                        </button>
+                    </template>
+
+                    <!-- IMAGENS -->
+                    <draggable
+                        v-model="task.images"
+                        item-key="id"
+                        :group="{ name: 'images', pull: true, put: true }"
+                        :disabled="isReorderingImages"
+                        @change="saveImageOrder(task)"
+                        style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;"
+                    >
+                        <template #item="{ element: image }">
+                            <div style="display:flex; flex-direction:column; align-items:center;">
+                                
+                                <input
+                                    type="checkbox"
+                                    :value="image.id"
+                                    v-model="selectedImages"
+                                    style="margin-bottom:5px;"
+                                />
+
+                                <img
+                                    :src="`${STORAGE_URL}/${image.image}`"
+                                    style="width:120px; height:120px; object-fit:cover; border-radius:10px;"
+                                />
+                            </div>
+                        </template>
+                    </draggable>
+
+                    <!-- ações -->
+                    <button @click="deleteTask(task.id)" style="margin-left: 10px;">
+                        Deletar
                     </button>
-                    <button @click="editingTask = null">
-                        Cancelar
+
+                    <button @click="updateTask(task.id)" style="margin-left: 10px;">
+                        Concluída
                     </button>
-                </template>
-                <template v-else>
-                    {{ task.title }}
-                    <button @click="startEdit(task)">
-                        Editar
-                    </button>
-                </template>
-                <div v-if="task.images?.length > 0" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
-                    <div v-for="image in task.images" :key="image.id" style="display: flex; flex-direction: column; align-items: center;">
-                        <input type="checkbox" :value="image.id" v-model="selectedImages"/>
-                        <img :src="'http://127.0.0.1:8000/storage/' + image.image" style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;"/>
-                    </div>
-                </div>
-                <button @click="deleteTask(task.id)" style="margin-left: 10px;">
-                    Deletar
-                </button>
-                <button @click="updateTask(task.id)" style="margin-left: 10px;">
-                    Concluída
-                </button>
-            </li>
-        </ul>
+
+                </li>
+            </template>
+        </draggable>
 
         <!-- aqui vai ficar o separador  -->
 
-        <div v-if="tasks.filter(task => task.done).length === 0">
+        <div v-if="completedTasks.length === 0">
             Nenhuma task concluída
         </div>
 
         <ul v-else>
-            <li v-for="task in tasks.filter(task => task.done)" :key="task.id" style="margin-left: -25px;">
+            <li v-for="task in completedTasks" :key="task.id" style="margin-left: -25px;">
                 <input type="checkbox" :value="task.id" v-model="selectedTasks"/>
                 {{ task.title }}
                 <button @click="deleteTask(task.id)" style="margin-left: 10px;">

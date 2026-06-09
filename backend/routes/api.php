@@ -8,3 +8,5 @@ Route::post('/tasks', [TaskController::class, 'store']);
 Route::put('/tasks/{id}', [TaskController::class, 'update']);
 Route::delete('/tasks/{id}', [TaskController::class, 'destroy']);
 Route::delete('/images/{id}', [TaskController::class, 'deleteImage']);
+Route::post('/tasks/reorder', [TaskController::class, 'reorder']);
+Route::post('/images/reorder', [TaskController::class, 'reorderImages']);
