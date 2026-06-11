@@ -27,6 +27,42 @@
     const isExitingSelectionMode = ref(false);
     const requestCount = ref(0);
     const isLoading = computed(() => requestCount.value > 0);
+    const lightboxImage = ref(null);
+    const justClosedLightbox = ref(false);
+    let imageClickTimer = null;
+
+    function handleImageClick(imageId, imageUrl) {
+        if (isSelectionMode.value) {
+            toggleImageSelection(imageId);
+            return;
+        }
+        if (imageClickTimer) {
+            clearTimeout(imageClickTimer);
+            imageClickTimer = null;
+            return;
+        }
+        imageClickTimer = setTimeout(() => {
+            imageClickTimer = null;
+            openLightbox(imageUrl);
+        }, 250);
+    }
+
+    function handleImageDblClick(imageId) {
+        if (imageClickTimer) {
+            clearTimeout(imageClickTimer);
+            imageClickTimer = null;
+        }
+        if (justClosedLightbox.value) {
+            justClosedLightbox.value = false; // reseta imediatamente
+            const task = tasks.value.find(t => t.images.some(img => img.id === imageId));
+            const image = task?.images.find(img => img.id === imageId);
+            if (image) {
+                openLightbox(`${STORAGE_URL}/${image.image}`);
+            }
+            return;
+        }
+        enterSelectionModeFromImage(imageId);
+    }
 
     axios.interceptors.request.use(config => {
         requestCount.value++;
@@ -95,11 +131,15 @@
         }
     }
     
-    async function updateTask(id) {
+    async function toggleTaskDone(id, done) {
         try {
-            await axios.put(`${API_URL}/tasks/${id}`, { done: true });
             const task = tasks.value.find(t => t.id === id);
-            if (task) task.done = true;
+            if (!task) return;
+            await axios.put(`${API_URL}/tasks/${id}`, {
+                title: task.title,
+                done: done
+            });
+            task.done = done;
         } catch (error) {
             console.log(error.response?.data);
             loadTasks();
@@ -330,6 +370,19 @@
         }
     }
 
+    function openLightbox(imageUrl) {
+        if (isSelectionMode.value) return; // no modo seleção, não abre
+        lightboxImage.value = imageUrl;
+    }
+
+    function closeLightbox() {
+        lightboxImage.value = null;
+        justClosedLightbox.value = true;
+        setTimeout(() => {
+            justClosedLightbox.value = false;
+        }, 500);
+    }
+
     onMounted(() => {
         loadTasks();
     });
@@ -353,22 +406,20 @@
                 Criar
             </button>
         </div>
-        <div v-if="imagePreviews.length > 0" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
-            <div v-for="(preview, index) in imagePreviews" :key="index" style="position: relative;">
-                <img 
-                    :src="preview" 
-                    style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;" 
-                />
-                <button 
-                    @click="removeUploadImage(index)" 
-                    style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
-                    :disabled="isLoading"
-                >
-                    X
-                </button>
-            </div>
+        <div v-for="(preview, index) in imagePreviews" :key="index" style="position: relative;">
+            <img 
+                :src="preview" 
+                style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;"
+                @click="openLightbox(preview)"
+            />
+            <button 
+                @click="removeUploadImage(index)" 
+                style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
+                :disabled="isLoading"
+            >
+                X
+            </button>
         </div>
-
         <div v-if="pendingTasks.length === 0">
             Nenhuma task encontrada
         </div>
@@ -401,6 +452,7 @@
                                     <img 
                                         :src="`${STORAGE_URL}/${img.image}`"
                                         style="width: 100px; height: 100px; object-fit: cover; border-radius: 5px;"
+                                        @click="openLightbox(`${STORAGE_URL}/${img.image}`)"
                                     />
                                     <button 
                                         @click="deleteExistingImage(img.id)"
@@ -430,6 +482,7 @@
                                     <img 
                                         :src="preview"
                                         style="width: 100px; height: 100px; object-fit: cover; border-radius: 5px; border: 2px solid #4CAF50;"
+                                        @click="openLightbox(preview)"
                                     />
                                     <button 
                                         @click="deleteNewImage(index)"
@@ -474,8 +527,8 @@
                         <template #item="{ element: image }">
                         <div
                             style="display:flex; flex-direction:column; align-items:center;"
-                            @dblclick.stop="enterSelectionModeFromImage(image.id)"
-                            @click.stop="toggleImageSelection(image.id)"
+                            @click.stop="handleImageClick(image.id, `${STORAGE_URL}/${image.image}`)"
+                            @dblclick.stop="handleImageDblClick(image.id)"
                             :class="{ 'selected-image': isSelectionMode && selectedImages.includes(image.id) }"
                         >
 
@@ -492,7 +545,7 @@
                         Deletar
                     </button>
 
-                    <button @click.stop="updateTask(task.id)" style="margin-left: 10px;" :disabled="isLoading">
+                    <button @click.stop="toggleTaskDone(task.id, true)" style="margin-left: 10px;" :disabled="isLoading">
                         Concluída
                     </button>
 
@@ -518,12 +571,21 @@
             <button @click.stop="deleteTask(task.id)" style="margin-left: 10px;" :disabled="isLoading">
                 Deletar
             </button>
+            <button @click.stop="toggleTaskDone(task.id, false)" style="margin-left: 10px;" :disabled="isLoading">
+                Reabrir
+            </button>
         </li>
         <template v-if="isSelectionMode">
             <button v-if="isSelectionMode" @click.stop="deleteSelected" :disabled="isLoading">
                 Deletar Selecionados ({{ selectedTasks.length + selectedImages.length }})
             </button>
         </template>
+    </div>
+    <div v-if="lightboxImage" class="lightbox-overlay" @click="closeLightbox">
+        <div class="lightbox-content" @click.stop>
+            <img :src="lightboxImage" class="lightbox-image" />
+            <button class="lightbox-close" @click="closeLightbox">✕</button>
+        </div>
     </div>
 </template>
 
@@ -571,4 +633,52 @@
     @keyframes spin {
         to { transform: rotate(360deg); }
     }
+
+.lightbox-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.lightbox-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
+.lightbox-image {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 5px;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(255, 255, 255, 0.8);
+    border: none;
+    font-size: 1.5rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333;
+    transition: background 0.2s;
+}
+
+.lightbox-close:hover {
+    background: rgba(255, 255, 255, 1);
+}
 </style>
