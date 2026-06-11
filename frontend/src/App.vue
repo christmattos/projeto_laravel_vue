@@ -17,9 +17,10 @@
     const editingTask = ref(null);
     const editTitle = ref("");
     const editImages = ref([]);
+    const editExistingImages = ref([]);
+    const editImagePreviews = ref([]);
     const isReorderingTasks = ref(false);
-    const isReorderingImages = ref(false);
-
+    const isReorderingTasksImages = ref({});
     const pendingTasks = computed(() => tasks.value.filter(t => !t.done));
     const completedTasks = computed(() => tasks.value.filter(t => t.done));
 
@@ -126,16 +127,50 @@
     function startEdit(task) {
         editingTask.value = task.id;
         editTitle.value = task.title;
+        editExistingImages.value = [...task.images];
+        editImages.value = [];
+        editImagePreviews.value = [];
     }
 
     function handleEditImages(event) {
         editImages.value = Array.from(event.target.files);
+        editImagePreviews.value = editImages.value.map(file => URL.createObjectURL(file));
+    }
+
+    function deleteExistingImage(imageId) {
+        editExistingImages.value = editExistingImages.value.filter(img => img.id !== imageId);
+    }
+
+    function deleteNewImage(index) {
+        editImages.value.splice(index, 1);
+        editImagePreviews.value.splice(index, 1);
+    }
+
+    function cancelEdit() {
+        editingTask.value = null;
+        editTitle.value = "";
+        editImages.value = [];
+        editExistingImages.value = [];
+        editImagePreviews.value = [];
     }
 
     async function saveEdit(taskId) {
         try {
+            const task = tasks.value.find(t => t.id === taskId);
+            
+            const originalImageIds = task.images.map(img => img.id);
+            const remainingImageIds = editExistingImages.value.map(img => img.id);
+            const deletedImageIds = originalImageIds.filter(id => !remainingImageIds.includes(id));
+            
+            if (deletedImageIds.length > 0) {
+                await Promise.all(
+                    deletedImageIds.map(imageId =>
+                        axios.delete(`${API_URL}/images/${imageId}`)
+                    )
+                );
+            }
+            
             const formData = new FormData();
-
             formData.append("title", editTitle.value);
 
             editImages.value.forEach(image => formData.append("images[]", image));
@@ -153,6 +188,8 @@
             editingTask.value = null;
             editTitle.value = "";
             editImages.value = [];
+            editExistingImages.value = [];
+            editImagePreviews.value = [];
 
             loadTasks();
         } catch (error) {
@@ -180,25 +217,30 @@
     }
 
     async function saveImageOrder(task) {
-        if (isReorderingImages.value) return
-        isReorderingImages.value = true
-        
+        // Se essa task já está salvando, ignora a chamada
+        if (isReorderingTasksImages.value[task.id]) return;
+
+        // Marca que essa task está salvando
+        isReorderingTasksImages.value[task.id] = true;
+
         const positions = task.images.map((img, index) => ({
             id: img.id,
             task_id: task.id,
             position: index + 1
-        }))
+        }));
 
         try {
-            await axios.post(`${API_URL}/images/reorder`, {
-                positions
-            });
+            await axios.post(`${API_URL}/images/reorder`, { positions });
             await loadTasks();
         } catch (error) {
-            console.error(error.response?.data || error)
+            console.error(error.response?.data || error);
         } finally {
-            isReorderingImages.value = false
+            delete isReorderingTasksImages.value[task.id];
         }
+    }
+
+    function isTaskReordering(taskId) {
+        return !!isReorderingTasksImages.value[taskId];
     }
 
     onMounted(() => {
@@ -239,19 +281,61 @@
 
                     <!-- EDIT MODE -->
                     <template v-if="editingTask === task.id">
-                        <input v-model="editTitle" />
+                        <input v-model="editTitle" placeholder="Título da task" />
 
-                        <input
-                            type="file"
-                            multiple
-                            @change="handleEditImages"
-                        />
+                        <div style="margin-top: 10px; margin-bottom: 10px;">
+                            <h4>Imagens Existentes:</h4>
+                            <div v-if="editExistingImages.length === 0" style="font-size: 12px; color: #999;">
+                                Nenhuma imagem
+                            </div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                                <div v-for="img in editExistingImages" :key="img.id" style="position: relative;">
+                                    <img 
+                                        :src="`${STORAGE_URL}/${img.image}`"
+                                        style="width: 100px; height: 100px; object-fit: cover; border-radius: 5px;"
+                                    />
+                                    <button 
+                                        @click="deleteExistingImage(img.id)"
+                                        style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
+                                    >
+                                        X
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
 
-                        <button @click="saveEdit(task.id)">
+                        <div style="margin-bottom: 10px;">
+                            <h4>Adicionar Novas Imagens:</h4>
+                            <input
+                                type="file"
+                                multiple
+                                @change="handleEditImages"
+                            />
+                        </div>
+
+                        <div v-if="editImagePreviews.length > 0" style="margin-bottom: 10px;">
+                            <h4>Preview das Novas Imagens:</h4>
+                            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                                <div v-for="(preview, index) in editImagePreviews" :key="index" style="position: relative;">
+                                    <img 
+                                        :src="preview"
+                                        style="width: 100px; height: 100px; object-fit: cover; border-radius: 5px; border: 2px solid #4CAF50;"
+                                    />
+                                    <button 
+                                        @click="deleteNewImage(index)"
+                                        style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
+                                    >
+                                        X
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button @click="saveEdit(task.id)" style="margin-right: 10px;">
                             Salvar
                         </button>
 
-                        <button @click="editingTask = null">
+                        <button @click="cancelEdit">
                             Cancelar
                         </button>
                     </template>
@@ -267,10 +351,11 @@
 
                     <!-- IMAGENS -->
                     <draggable
+                        v-if="editingTask !== task.id"
                         v-model="task.images"
                         item-key="id"
-                        :group="{ name: 'images', pull: true, put: true }"
-                        :disabled="isReorderingImages"
+                        :group="{ name: 'images', pull: true, put: ['images'] }"
+                        :disabled="isTaskReordering(task.id)"
                         @change="saveImageOrder(task)"
                         style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;"
                     >
