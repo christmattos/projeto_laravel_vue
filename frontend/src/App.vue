@@ -23,6 +23,8 @@
     const isReorderingTasksImages = ref({});
     const pendingTasks = computed(() => tasks.value.filter(t => !t.done));
     const completedTasks = computed(() => tasks.value.filter(t => t.done));
+    const isSelectionMode = ref(false);
+    const isExitingSelectionMode = ref(false);
 
     // Sincronizar draggedTasks com pendingTasks
     watch(pendingTasks, (newVal) => {
@@ -92,35 +94,36 @@
         imagePreviews.value = uploadImages.value.map(file => URL.createObjectURL(file));
     }
 
-    async function deleteSelectedTasks() {
-        try {
-            await Promise.all(
-                selectedTasks.value.map(id =>
-                axios.delete(`${API_URL}/tasks/${id}`)
-                )
-            )
-            tasks.value = tasks.value.filter(t => !selectedTasks.value.includes(t.id));
-            selectedTasks.value = [];
-        } catch (error) {
-            console.log(error.response?.data);
-            loadTasks();
-        }
+    function removeUploadImage(index) {
+        uploadImages.value.splice(index, 1);
+        imagePreviews.value.splice(index, 1);
     }
 
-    async function deleteSelectedImages() {
+    async function deleteSelected() {
         try {
-            await Promise.all(
-                selectedImages.value.map(imageId =>
-                axios.delete(`${API_URL}/images/${imageId}`)
-                )
-            )
+            // Executa as deleções de tasks e imagens em paralelo
+            const tasksDeletion = selectedTasks.value.length > 0
+                ? Promise.all(selectedTasks.value.map(id => axios.delete(`${API_URL}/tasks/${id}`)))
+                : Promise.resolve();
+            const imagesDeletion = selectedImages.value.length > 0
+                ? Promise.all(selectedImages.value.map(imageId => axios.delete(`${API_URL}/images/${imageId}`)))
+                : Promise.resolve();
+
+            await Promise.all([tasksDeletion, imagesDeletion]);
+
+            // Atualiza o estado local removendo os itens deletados
+            tasks.value = tasks.value.filter(t => !selectedTasks.value.includes(t.id));
             tasks.value.forEach(t => {
                 t.images = t.images.filter(img => !selectedImages.value.includes(img.id));
             });
+
+            // Limpa as seleções e desativa o modo
+            selectedTasks.value = [];
             selectedImages.value = [];
+            isSelectionMode.value = false;
         } catch (error) {
-            console.log(error.response?.data);
-            loadTasks();
+            console.error(error.response?.data);
+            loadTasks(); // recarrega em caso de erro
         }
     }
 
@@ -243,6 +246,80 @@
         return !!isReorderingTasksImages.value[taskId];
     }
 
+    function enterSelectionModeFromTask(taskId) {
+        if (editingTask.value !== null) return;
+        if (isExitingSelectionMode.value) return;
+        if (isSelectionMode.value) return;
+        selectedTasks.value = [taskId];
+        selectedImages.value = [];
+        isSelectionMode.value = true;
+    }
+
+    function enterSelectionModeFromImage(imageId) {
+        if (editingTask.value !== null) return;
+        if (isExitingSelectionMode.value) return;
+        if (isSelectionMode.value) return;
+        selectedTasks.value = [];
+        selectedImages.value = [imageId];
+        isSelectionMode.value = true;
+    }
+
+    function toggleTaskSelection(taskId) {
+    if (editingTask.value !== null) return;
+    if (!isSelectionMode.value || isExitingSelectionMode.value) return;
+
+    const task = tasks.value.find(t => t.id === taskId);
+    if (task && task.images.some(img => selectedImages.value.includes(img.id))) {
+        return; // não permite selecionar a task se já tem imagem dela
+    }
+
+    const index = selectedTasks.value.indexOf(taskId);
+    if (index === -1) {
+        selectedTasks.value.push(taskId);
+    } else {
+        selectedTasks.value.splice(index, 1);
+    }
+        if (selectedTasks.value.length === 0 && selectedImages.value.length === 0) {
+            isExitingSelectionMode.value = true;   // ativa a trava
+            isSelectionMode.value = false;
+            setTimeout(() => {
+                isExitingSelectionMode.value = false;  // libera após 200ms
+            }, 500);
+        }
+    }
+
+    function toggleImageSelection(imageId) {
+    if (editingTask.value !== null) return;
+    if (!isSelectionMode.value || isExitingSelectionMode.value) return;
+
+    // Descobre a qual task a imagem pertence (procurando em todas as tasks)
+    let parentTask = null;
+    for (const t of tasks.value) {
+        if (t.images.some(img => img.id === imageId)) {
+            parentTask = t;
+            break;
+        }
+    }
+    // Se a task pai já está selecionada, impede a seleção da imagem
+    if (parentTask && selectedTasks.value.includes(parentTask.id)) {
+        return;
+    }
+
+    const index = selectedImages.value.indexOf(imageId);
+    if (index === -1) {
+        selectedImages.value.push(imageId);
+    } else {
+        selectedImages.value.splice(index, 1);
+    }
+        if (selectedTasks.value.length === 0 && selectedImages.value.length === 0) {
+            isExitingSelectionMode.value = true;   // ativa a trava
+            isSelectionMode.value = false;
+            setTimeout(() => {
+                isExitingSelectionMode.value = false;  // libera após 200ms
+            }, 500);
+        }
+    }
+
     onMounted(() => {
         loadTasks();
     });
@@ -260,7 +337,18 @@
             </button>
         </div>
         <div v-if="imagePreviews.length > 0" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
-            <img v-for="(preview, index) in imagePreviews" :key="index" :src="preview" style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;"/>
+            <div v-for="(preview, index) in imagePreviews" :key="index" style="position: relative;">
+                <img 
+                    :src="preview" 
+                    style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;" 
+                />
+                <button 
+                    @click="removeUploadImage(index)" 
+                    style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
+                >
+                    X
+                </button>
+            </div>
         </div>
 
         <div v-if="pendingTasks.length === 0">
@@ -270,14 +358,16 @@
         <draggable
             v-model="draggedTasks"
             item-key="id"
-            :disabled="isReorderingTasks"
+            :disabled="isReorderingTasks || isSelectionMode"
             @change="saveTaskOrder"
         >
             <template #item="{ element: task }">
-                <li style="margin-left: -25px; margin-bottom: 10px;">
-
-                    <!-- seleção -->
-                    <input type="checkbox" :value="task.id" v-model="selectedTasks"/>
+            <li
+                style="margin-left: -25px; margin-bottom: 10px;"
+                @dblclick.stop="enterSelectionModeFromTask(task.id)"
+                @click="toggleTaskSelection(task.id)"
+                :class="{ 'selected-item': isSelectionMode && selectedTasks.includes(task.id) }"
+            >
 
                     <!-- EDIT MODE -->
                     <template v-if="editingTask === task.id">
@@ -344,9 +434,8 @@
                     <template v-else>
                         {{ task.title }}
 
-                        <button @click="startEdit(task)">
-                            Editar
-                        </button>
+                        <button @click.stop="startEdit(task)">Editar</button>
+
                     </template>
 
                     <!-- IMAGENS -->
@@ -355,19 +444,17 @@
                         v-model="task.images"
                         item-key="id"
                         :group="{ name: 'images', pull: true, put: ['images'] }"
-                        :disabled="isTaskReordering(task.id)"
+                        :disabled="isTaskReordering(task.id) || isSelectionMode"
                         @change="saveImageOrder(task)"
                         style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;"
                     >
                         <template #item="{ element: image }">
-                            <div style="display:flex; flex-direction:column; align-items:center;">
-                                
-                                <input
-                                    type="checkbox"
-                                    :value="image.id"
-                                    v-model="selectedImages"
-                                    style="margin-bottom:5px;"
-                                />
+                        <div
+                            style="display:flex; flex-direction:column; align-items:center;"
+                            @dblclick.stop="enterSelectionModeFromImage(image.id)"
+                            @click.stop="toggleImageSelection(image.id)"
+                            :class="{ 'selected-image': isSelectionMode && selectedImages.includes(image.id) }"
+                        >
 
                                 <img
                                     :src="`${STORAGE_URL}/${image.image}`"
@@ -378,13 +465,9 @@
                     </draggable>
 
                     <!-- ações -->
-                    <button @click="deleteTask(task.id)" style="margin-left: 10px;">
-                        Deletar
-                    </button>
+                    <button @click.stop="deleteTask(task.id)" style="margin-left: 10px;">Deletar</button>
 
-                    <button @click="updateTask(task.id)" style="margin-left: 10px;">
-                        Concluída
-                    </button>
+                    <button @click.stop="updateTask(task.id)" style="margin-left: 10px;">Concluída</button>
 
                 </li>
             </template>
@@ -396,20 +479,34 @@
             Nenhuma task concluída
         </div>
 
-        <ul v-else>
-            <li v-for="task in completedTasks" :key="task.id" style="margin-left: -25px;">
-                <input type="checkbox" :value="task.id" v-model="selectedTasks"/>
-                {{ task.title }}
-                <button @click="deleteTask(task.id)" style="margin-left: 10px;">
-                    Deletar
-                </button>
-            </li>
-        </ul>
-        <button @click="deleteSelectedTasks">
-            Deletar Tasks Selecionadas
-        </button>
-        <button @click="deleteSelectedImages">
-            Deletar Imagens
-        </button>
+        <li
+            v-for="task in completedTasks" 
+            :key="task.id" 
+            style="margin-left: -25px;"
+            @dblclick.stop="enterSelectionModeFromTask(task.id)"
+            @click="toggleTaskSelection(task.id)"
+            :class="{ 'selected-item': isSelectionMode && selectedTasks.includes(task.id) }"
+        >
+            {{ task.title }}
+            <button @click.stop="deleteTask(task.id)" style="margin-left: 10px;">
+                Deletar
+            </button>
+        </li>
+        <template v-if="isSelectionMode">
+            <button v-if="isSelectionMode" @click.stop="deleteSelected">
+                Deletar Selecionados ({{ selectedTasks.length + selectedImages.length }})
+            </button>
+        </template>
     </div>
 </template>
+
+<style scoped>
+    .selected-item {
+        outline: 2px solid red;
+        outline-offset: 2px;
+    }
+    .selected-image img {
+        outline: 2px solid red;
+        outline-offset: 2px;
+    }
+</style>
