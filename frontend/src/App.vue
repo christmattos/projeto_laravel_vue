@@ -25,8 +25,25 @@
     const completedTasks = computed(() => tasks.value.filter(t => t.done));
     const isSelectionMode = ref(false);
     const isExitingSelectionMode = ref(false);
+    const requestCount = ref(0);
+    const isLoading = computed(() => requestCount.value > 0);
 
-    // Sincronizar draggedTasks com pendingTasks
+    axios.interceptors.request.use(config => {
+        requestCount.value++;
+        return config;
+    }, error => {
+        requestCount.value--;
+        return Promise.reject(error);
+    });
+
+    axios.interceptors.response.use(response => {
+        requestCount.value--;
+        return response;
+    }, error => {
+        requestCount.value--;
+        return Promise.reject(error);
+    });
+
     watch(pendingTasks, (newVal) => {
         draggedTasks.value = newVal;
     }, { deep: true });
@@ -101,7 +118,6 @@
 
     async function deleteSelected() {
         try {
-            // Executa as deleções de tasks e imagens em paralelo
             const tasksDeletion = selectedTasks.value.length > 0
                 ? Promise.all(selectedTasks.value.map(id => axios.delete(`${API_URL}/tasks/${id}`)))
                 : Promise.resolve();
@@ -111,19 +127,17 @@
 
             await Promise.all([tasksDeletion, imagesDeletion]);
 
-            // Atualiza o estado local removendo os itens deletados
             tasks.value = tasks.value.filter(t => !selectedTasks.value.includes(t.id));
             tasks.value.forEach(t => {
                 t.images = t.images.filter(img => !selectedImages.value.includes(img.id));
             });
 
-            // Limpa as seleções e desativa o modo
             selectedTasks.value = [];
             selectedImages.value = [];
             isSelectionMode.value = false;
         } catch (error) {
             console.error(error.response?.data);
-            loadTasks(); // recarrega em caso de erro
+            loadTasks();
         }
     }
 
@@ -220,10 +234,8 @@
     }
 
     async function saveImageOrder(task) {
-        // Se essa task já está salvando, ignora a chamada
         if (isReorderingTasksImages.value[task.id]) return;
 
-        // Marca que essa task está salvando
         isReorderingTasksImages.value[task.id] = true;
 
         const positions = task.images.map((img, index) => ({
@@ -270,7 +282,7 @@
 
     const task = tasks.value.find(t => t.id === taskId);
     if (task && task.images.some(img => selectedImages.value.includes(img.id))) {
-        return; // não permite selecionar a task se já tem imagem dela
+        return;
     }
 
     const index = selectedTasks.value.indexOf(taskId);
@@ -280,10 +292,10 @@
         selectedTasks.value.splice(index, 1);
     }
         if (selectedTasks.value.length === 0 && selectedImages.value.length === 0) {
-            isExitingSelectionMode.value = true;   // ativa a trava
+            isExitingSelectionMode.value = true;
             isSelectionMode.value = false;
             setTimeout(() => {
-                isExitingSelectionMode.value = false;  // libera após 200ms
+                isExitingSelectionMode.value = false;
             }, 500);
         }
     }
@@ -292,7 +304,6 @@
     if (editingTask.value !== null) return;
     if (!isSelectionMode.value || isExitingSelectionMode.value) return;
 
-    // Descobre a qual task a imagem pertence (procurando em todas as tasks)
     let parentTask = null;
     for (const t of tasks.value) {
         if (t.images.some(img => img.id === imageId)) {
@@ -300,7 +311,6 @@
             break;
         }
     }
-    // Se a task pai já está selecionada, impede a seleção da imagem
     if (parentTask && selectedTasks.value.includes(parentTask.id)) {
         return;
     }
@@ -312,10 +322,10 @@
         selectedImages.value.splice(index, 1);
     }
         if (selectedTasks.value.length === 0 && selectedImages.value.length === 0) {
-            isExitingSelectionMode.value = true;   // ativa a trava
+            isExitingSelectionMode.value = true;
             isSelectionMode.value = false;
             setTimeout(() => {
-                isExitingSelectionMode.value = false;  // libera após 200ms
+                isExitingSelectionMode.value = false;
             }, 500);
         }
     }
@@ -329,10 +339,17 @@
     <div style="padding: 20px">
         <h1>Lista de Tasks</h1>
 
+    <div v-if="isLoading" class="loading-overlay">
+        <div class="loading-box">
+            <div class="spinner"></div>
+            <span>Processando requisição...</span>
+        </div>
+    </div>
+
         <div style="margin-bottom: 20px">
             <input v-model="newTask" placeholder="Digite uma task" style="margin-right: 10px"/>
-            <input ref="fileInput" type="file" multiple @change="handleImages"/>
-            <button @click="createTask">
+            <input ref="fileInput" type="file" multiple @change="handleImages" :disabled="isLoading"/>
+            <button @click="createTask" :disabled="isLoading">
                 Criar
             </button>
         </div>
@@ -345,6 +362,7 @@
                 <button 
                     @click="removeUploadImage(index)" 
                     style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
+                    :disabled="isLoading"
                 >
                     X
                 </button>
@@ -358,7 +376,7 @@
         <draggable
             v-model="draggedTasks"
             item-key="id"
-            :disabled="isReorderingTasks || isSelectionMode"
+            :disabled="isReorderingTasks || isSelectionMode || isLoading"
             @change="saveTaskOrder"
         >
             <template #item="{ element: task }">
@@ -371,7 +389,7 @@
 
                     <!-- EDIT MODE -->
                     <template v-if="editingTask === task.id">
-                        <input v-model="editTitle" placeholder="Título da task" />
+                        <input v-model="editTitle" placeholder="Título da task" :disabled="isLoading"/>
 
                         <div style="margin-top: 10px; margin-bottom: 10px;">
                             <h4>Imagens Existentes:</h4>
@@ -387,6 +405,7 @@
                                     <button 
                                         @click="deleteExistingImage(img.id)"
                                         style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
+                                        :disabled="isLoading"
                                     >
                                         X
                                     </button>
@@ -400,6 +419,7 @@
                                 type="file"
                                 multiple
                                 @change="handleEditImages"
+                                :disabled="isLoading"
                             />
                         </div>
 
@@ -414,6 +434,7 @@
                                     <button 
                                         @click="deleteNewImage(index)"
                                         style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
+                                        :disabled="isLoading"
                                     >
                                         X
                                     </button>
@@ -421,11 +442,11 @@
                             </div>
                         </div>
 
-                        <button @click="saveEdit(task.id)" style="margin-right: 10px;">
+                        <button @click="saveEdit(task.id)" style="margin-right: 10px;" :disabled="isLoading">
                             Salvar
                         </button>
 
-                        <button @click="cancelEdit">
+                        <button @click="cancelEdit" :disabled="isLoading">
                             Cancelar
                         </button>
                     </template>
@@ -434,7 +455,9 @@
                     <template v-else>
                         {{ task.title }}
 
-                        <button @click.stop="startEdit(task)">Editar</button>
+                        <button @click.stop="startEdit(task)" :disabled="isLoading">
+                            Editar
+                        </button>
 
                     </template>
 
@@ -444,7 +467,7 @@
                         v-model="task.images"
                         item-key="id"
                         :group="{ name: 'images', pull: true, put: ['images'] }"
-                        :disabled="isTaskReordering(task.id) || isSelectionMode"
+                        :disabled="isTaskReordering(task.id) || isSelectionMode || isLoading"
                         @change="saveImageOrder(task)"
                         style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;"
                     >
@@ -465,9 +488,13 @@
                     </draggable>
 
                     <!-- ações -->
-                    <button @click.stop="deleteTask(task.id)" style="margin-left: 10px;">Deletar</button>
+                    <button @click.stop="deleteTask(task.id)" style="margin-left: 10px;" :disabled="isLoading">
+                        Deletar
+                    </button>
 
-                    <button @click.stop="updateTask(task.id)" style="margin-left: 10px;">Concluída</button>
+                    <button @click.stop="updateTask(task.id)" style="margin-left: 10px;" :disabled="isLoading">
+                        Concluída
+                    </button>
 
                 </li>
             </template>
@@ -488,12 +515,12 @@
             :class="{ 'selected-item': isSelectionMode && selectedTasks.includes(task.id) }"
         >
             {{ task.title }}
-            <button @click.stop="deleteTask(task.id)" style="margin-left: 10px;">
+            <button @click.stop="deleteTask(task.id)" style="margin-left: 10px;" :disabled="isLoading">
                 Deletar
             </button>
         </li>
         <template v-if="isSelectionMode">
-            <button v-if="isSelectionMode" @click.stop="deleteSelected">
+            <button v-if="isSelectionMode" @click.stop="deleteSelected" :disabled="isLoading">
                 Deletar Selecionados ({{ selectedTasks.length + selectedImages.length }})
             </button>
         </template>
@@ -508,5 +535,40 @@
     .selected-image img {
         outline: 2px solid red;
         outline-offset: 2px;
+    }
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.5); /* fundo escuro semi-transparente */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999; /* garante que fique acima de tudo */
+    }
+
+    .loading-box {
+        background: white;
+        padding: 20px 40px;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        color: #333;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .spinner {
+        width: 20px;
+        height: 20px;
+        border: 3px solid #ccc;
+        border-top-color: #007bff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
     }
 </style>
