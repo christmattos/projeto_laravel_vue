@@ -383,6 +383,11 @@
         }, 500);
     }
 
+    function checkTaskMove(evt) {
+        // Se a task arrastada está em edição, cancela o movimento
+        return editingTask.value !== evt.draggedContext.element.id;
+    }
+
     onMounted(() => {
         loadTasks();
     });
@@ -403,11 +408,11 @@
 
         <div class="form-container">
             <input v-model="newTask" placeholder="Digite uma task" class="input-task" />
-            <input ref="fileInput" type="file" multiple @change="handleImages" :disabled="isLoading" />
+            <input ref="fileInput" type="file" accept="image/jpeg, image/png, image/webp" multiple @change="handleImages" :disabled="isLoading" />
             <button @click="createTask" :disabled="isLoading">Criar</button>
         </div>
 
-        <div v-for="(preview, index) in imagePreviews" :key="index" class="preview-container">
+        <div v-for="(preview, index) in imagePreviews" :key="index" class="preview-container bottom-spacing">
             <img :src="preview" class="preview-image" @click="openLightbox(preview)" />
             <button @click="removeUploadImage(index)" class="remove-btn" :disabled="isLoading">X</button>
         </div>
@@ -421,6 +426,8 @@
             tag="ul"
             item-key="id"
             :disabled="isReorderingTasks || isSelectionMode || isLoading"
+            handle=".drag-handle"
+            :move="checkTaskMove"
             @change="saveTaskOrder"
         >
             <template #item="{ element: task }">
@@ -431,45 +438,46 @@
                     :class="{ 'selected-item': isSelectionMode && selectedTasks.includes(task.id) }"
                 >
                     <!-- EDIT MODE -->
+                    <span v-if="editingTask !== task.id" class="drag-handle">⠿</span>
                     <template v-if="editingTask === task.id">
                         <input v-model="editTitle" placeholder="Título da task" :disabled="isLoading" />
 
-                        <div class="section-spacing">
-                            <h4>Imagens Existentes:</h4>
+                        <div class="remove-top-spacing-xl">
+                            <h4 class="bottom-spacing-small" >Imagens Existentes:</h4>
                             <div v-if="editExistingImages.length === 0" class="empty-text">Nenhuma imagem</div>
-                            <div class="images-grid">
+                            <div class="images-grid bottom-spacing">
                                 <div v-for="img in editExistingImages" :key="img.id" class="preview-container">
                                     <img
                                         :src="`${STORAGE_URL}/${img.image}`"
                                         class="preview-image-small"
                                         @click="openLightbox(`${STORAGE_URL}/${img.image}`)"
                                     />
-                                    <button @click="deleteExistingImage(img.id)" class="remove-btn" :disabled="isLoading">X</button>
+                                    <button @click="deleteExistingImage(img.id)" class="remove-btn-edit" :disabled="isLoading">X</button>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="bottom-spacing">
-                            <h4>Adicionar Novas Imagens:</h4>
-                            <input type="file" multiple @change="handleEditImages" :disabled="isLoading" />
+                        <div>
+                            <h4 class="bottom-spacing-remove-top">Adicionar Novas Imagens:</h4>
+                            <input type="file" accept="image/jpeg, image/png, image/webp" multiple @change="handleEditImages" :disabled="isLoading" />
                         </div>
 
-                        <div v-if="editImagePreviews.length > 0" class="bottom-spacing">
+                        <div v-if="editImagePreviews.length > 0">
                             <h4>Preview das Novas Imagens:</h4>
-                            <div class="images-grid">
+                            <div class="images-grid remove-top-spacing-xl">
                                 <div v-for="(preview, index) in editImagePreviews" :key="index" class="preview-container">
                                     <img
                                         :src="preview"
                                         class="preview-image-small preview-image-new"
                                         @click="openLightbox(preview)"
                                     />
-                                    <button @click="deleteNewImage(index)" class="remove-btn" :disabled="isLoading">X</button>
+                                    <button @click="deleteNewImage(index)" class="remove-btn-edit" :disabled="isLoading">X</button>
                                 </div>
                             </div>
                         </div>
 
-                        <button @click="saveEdit(task.id)" class="btn-spacing" :disabled="isLoading">Salvar</button>
-                        <button @click="cancelEdit" :disabled="isLoading">Cancelar</button>
+                        <button @click="saveEdit(task.id)" class="btn-right-top-spacing" :disabled="isLoading">Salvar</button>
+                        <button @click="cancelEdit" :disabled="isLoading" class="btn-right-spacing">Cancelar</button>
                     </template>
 
                     <!-- VIEW MODE -->
@@ -487,6 +495,7 @@
                         :disabled="isTaskReordering(task.id) || isSelectionMode || isLoading"
                         @change="saveImageOrder(task)"
                         class="images-grid images-grid-margin"
+                        :class="{ 'empty-drop-zone': task.images.length === 0 }"
                     >
                         <template #item="{ element: image }">
                             <div
@@ -503,8 +512,8 @@
                         </template>
                     </draggable>
 
-                    <button @click.stop="deleteTask(task.id)" class="btn-left-spacing" :disabled="isLoading">Deletar</button>
-                    <button @click.stop="toggleTaskDone(task.id, true)" class="btn-left-spacing" :disabled="isLoading">Concluída</button>
+                    <button v-if="editingTask !== task.id" @click.stop="deleteTask(task.id)" :disabled="isLoading">Deletar</button>
+                    <button v-if="editingTask !== task.id" @click.stop="toggleTaskDone(task.id, true)" class="btn-left-spacing" :disabled="isLoading">Concluída</button>
                 </li>
             </template>
         </draggable>
