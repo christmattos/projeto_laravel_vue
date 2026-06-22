@@ -388,130 +388,94 @@
     });
 </script>
 
+<style scoped src="./styles.css"></style>
+
 <template>
-    <div style="padding: 20px">
+    <div class="container">
         <h1>Lista de Tasks</h1>
 
-    <div v-if="isLoading" class="loading-overlay">
-        <div class="loading-box">
-            <div class="spinner"></div>
-            <span>Processando requisição...</span>
+        <div v-if="isLoading" class="loading-overlay">
+            <div class="loading-box">
+                <div class="spinner"></div>
+                <span>Processando requisição...</span>
+            </div>
         </div>
-    </div>
 
-        <div style="margin-bottom: 20px">
-            <input v-model="newTask" placeholder="Digite uma task" style="margin-right: 10px"/>
-            <input ref="fileInput" type="file" multiple @change="handleImages" :disabled="isLoading"/>
-            <button @click="createTask" :disabled="isLoading">
-                Criar
-            </button>
+        <div class="form-container">
+            <input v-model="newTask" placeholder="Digite uma task" class="input-task" />
+            <input ref="fileInput" type="file" multiple @change="handleImages" :disabled="isLoading" />
+            <button @click="createTask" :disabled="isLoading">Criar</button>
         </div>
-        <div v-for="(preview, index) in imagePreviews" :key="index" style="position: relative;">
-            <img 
-                :src="preview" 
-                style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px;"
-                @click="openLightbox(preview)"
-            />
-            <button 
-                @click="removeUploadImage(index)" 
-                style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
-                :disabled="isLoading"
-            >
-                X
-            </button>
+
+        <div v-for="(preview, index) in imagePreviews" :key="index" class="preview-container">
+            <img :src="preview" class="preview-image" @click="openLightbox(preview)" />
+            <button @click="removeUploadImage(index)" class="remove-btn" :disabled="isLoading">X</button>
         </div>
+
         <div v-if="pendingTasks.length === 0">
             Nenhuma task encontrada
         </div>
 
         <draggable
             v-model="draggedTasks"
+            tag="ul"
             item-key="id"
             :disabled="isReorderingTasks || isSelectionMode || isLoading"
             @change="saveTaskOrder"
         >
             <template #item="{ element: task }">
-            <li
-                style="margin-left: -25px; margin-bottom: 10px;"
-                @dblclick.stop="enterSelectionModeFromTask(task.id)"
-                @click="toggleTaskSelection(task.id)"
-                :class="{ 'selected-item': isSelectionMode && selectedTasks.includes(task.id) }"
-            >
-
+                <li
+                    class="task-item"
+                    @dblclick.stop="enterSelectionModeFromTask(task.id)"
+                    @click="toggleTaskSelection(task.id)"
+                    :class="{ 'selected-item': isSelectionMode && selectedTasks.includes(task.id) }"
+                >
                     <!-- EDIT MODE -->
                     <template v-if="editingTask === task.id">
-                        <input v-model="editTitle" placeholder="Título da task" :disabled="isLoading"/>
+                        <input v-model="editTitle" placeholder="Título da task" :disabled="isLoading" />
 
-                        <div style="margin-top: 10px; margin-bottom: 10px;">
+                        <div class="section-spacing">
                             <h4>Imagens Existentes:</h4>
-                            <div v-if="editExistingImages.length === 0" style="font-size: 12px; color: #999;">
-                                Nenhuma imagem
-                            </div>
-                            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                                <div v-for="img in editExistingImages" :key="img.id" style="position: relative;">
-                                    <img 
+                            <div v-if="editExistingImages.length === 0" class="empty-text">Nenhuma imagem</div>
+                            <div class="images-grid">
+                                <div v-for="img in editExistingImages" :key="img.id" class="preview-container">
+                                    <img
                                         :src="`${STORAGE_URL}/${img.image}`"
-                                        style="width: 100px; height: 100px; object-fit: cover; border-radius: 5px;"
+                                        class="preview-image-small"
                                         @click="openLightbox(`${STORAGE_URL}/${img.image}`)"
                                     />
-                                    <button 
-                                        @click="deleteExistingImage(img.id)"
-                                        style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
-                                        :disabled="isLoading"
-                                    >
-                                        X
-                                    </button>
+                                    <button @click="deleteExistingImage(img.id)" class="remove-btn" :disabled="isLoading">X</button>
                                 </div>
                             </div>
                         </div>
 
-                        <div style="margin-bottom: 10px;">
+                        <div class="bottom-spacing">
                             <h4>Adicionar Novas Imagens:</h4>
-                            <input
-                                type="file"
-                                multiple
-                                @change="handleEditImages"
-                                :disabled="isLoading"
-                            />
+                            <input type="file" multiple @change="handleEditImages" :disabled="isLoading" />
                         </div>
 
-                        <div v-if="editImagePreviews.length > 0" style="margin-bottom: 10px;">
+                        <div v-if="editImagePreviews.length > 0" class="bottom-spacing">
                             <h4>Preview das Novas Imagens:</h4>
-                            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                                <div v-for="(preview, index) in editImagePreviews" :key="index" style="position: relative;">
-                                    <img 
+                            <div class="images-grid">
+                                <div v-for="(preview, index) in editImagePreviews" :key="index" class="preview-container">
+                                    <img
                                         :src="preview"
-                                        style="width: 100px; height: 100px; object-fit: cover; border-radius: 5px; border: 2px solid #4CAF50;"
+                                        class="preview-image-small preview-image-new"
                                         @click="openLightbox(preview)"
                                     />
-                                    <button 
-                                        @click="deleteNewImage(index)"
-                                        style="position: absolute; top: 2px; right: 2px; padding: 2px 6px; background: red; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;"
-                                        :disabled="isLoading"
-                                    >
-                                        X
-                                    </button>
+                                    <button @click="deleteNewImage(index)" class="remove-btn" :disabled="isLoading">X</button>
                                 </div>
                             </div>
                         </div>
 
-                        <button @click="saveEdit(task.id)" style="margin-right: 10px;" :disabled="isLoading">
-                            Salvar
-                        </button>
-
-                        <button @click="cancelEdit" :disabled="isLoading">
-                            Cancelar
-                        </button>
+                        <button @click="saveEdit(task.id)" class="btn-spacing" :disabled="isLoading">Salvar</button>
+                        <button @click="cancelEdit" :disabled="isLoading">Cancelar</button>
                     </template>
 
                     <!-- VIEW MODE -->
                     <template v-else>
                         {{ task.title }}
-
-                        <button @click.stop="startEdit(task)" :disabled="isLoading">
-                            Editar
-                        </button>
-
+                        <button @click.stop="startEdit(task)" :disabled="isLoading">Editar</button>
                     </template>
 
                     <!-- IMAGENS -->
@@ -522,65 +486,53 @@
                         :group="{ name: 'images', pull: true, put: ['images'] }"
                         :disabled="isTaskReordering(task.id) || isSelectionMode || isLoading"
                         @change="saveImageOrder(task)"
-                        style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;"
+                        class="images-grid images-grid-margin"
                     >
                         <template #item="{ element: image }">
-                        <div
-                            style="display:flex; flex-direction:column; align-items:center;"
-                            @click.stop="handleImageClick(image.id, `${STORAGE_URL}/${image.image}`)"
-                            @dblclick.stop="handleImageDblClick(image.id)"
-                            :class="{ 'selected-image': isSelectionMode && selectedImages.includes(image.id) }"
-                        >
-
+                            <div
+                                class="image-item"
+                                @click.stop="handleImageClick(image.id, `${STORAGE_URL}/${image.image}`)"
+                                @dblclick.stop="handleImageDblClick(image.id)"
+                                :class="{ 'selected-image': isSelectionMode && selectedImages.includes(image.id) }"
+                            >
                                 <img
                                     :src="`${STORAGE_URL}/${image.image}`"
-                                    style="width:120px; height:120px; object-fit:cover; border-radius:10px;"
+                                    class="preview-image"
                                 />
                             </div>
                         </template>
                     </draggable>
 
-                    <!-- ações -->
-                    <button @click.stop="deleteTask(task.id)" style="margin-left: 10px;" :disabled="isLoading">
-                        Deletar
-                    </button>
-
-                    <button @click.stop="toggleTaskDone(task.id, true)" style="margin-left: 10px;" :disabled="isLoading">
-                        Concluída
-                    </button>
-
+                    <button @click.stop="deleteTask(task.id)" class="btn-left-spacing" :disabled="isLoading">Deletar</button>
+                    <button @click.stop="toggleTaskDone(task.id, true)" class="btn-left-spacing" :disabled="isLoading">Concluída</button>
                 </li>
             </template>
         </draggable>
-
-        <!-- aqui vai ficar o separador  -->
 
         <div v-if="completedTasks.length === 0">
             Nenhuma task concluída
         </div>
 
-        <li
-            v-for="task in completedTasks" 
-            :key="task.id" 
-            style="margin-left: -25px;"
-            @dblclick.stop="enterSelectionModeFromTask(task.id)"
-            @click="toggleTaskSelection(task.id)"
-            :class="{ 'selected-item': isSelectionMode && selectedTasks.includes(task.id) }"
-        >
-            {{ task.title }}
-            <button @click.stop="deleteTask(task.id)" style="margin-left: 10px;" :disabled="isLoading">
-                Deletar
-            </button>
-            <button @click.stop="toggleTaskDone(task.id, false)" style="margin-left: 10px;" :disabled="isLoading">
-                Reabrir
-            </button>
-        </li>
-        <template v-if="isSelectionMode">
-            <button v-if="isSelectionMode" @click.stop="deleteSelected" :disabled="isLoading">
-                Deletar Selecionados ({{ selectedTasks.length + selectedImages.length }})
-            </button>
-        </template>
+        <ul>
+            <li
+                v-for="task in completedTasks"
+                :key="task.id"
+                class="completed-task"
+                @dblclick.stop="enterSelectionModeFromTask(task.id)"
+                @click="toggleTaskSelection(task.id)"
+                :class="{ 'selected-item': isSelectionMode && selectedTasks.includes(task.id) }"
+            >
+                {{ task.title }}
+                <button @click.stop="deleteTask(task.id)" class="btn-left-spacing" :disabled="isLoading">Deletar</button>
+                <button @click.stop="toggleTaskDone(task.id, false)" class="btn-left-spacing" :disabled="isLoading">Reabrir</button>
+            </li>
+        </ul>
+
+        <button v-if="isSelectionMode" @click.stop="deleteSelected" :disabled="isLoading">
+            Deletar Selecionados ({{ selectedTasks.length + selectedImages.length }})
+        </button>
     </div>
+
     <div v-if="lightboxImage" class="lightbox-overlay" @click="closeLightbox">
         <div class="lightbox-content" @click.stop>
             <img :src="lightboxImage" class="lightbox-image" />
@@ -588,97 +540,3 @@
         </div>
     </div>
 </template>
-
-<style scoped>
-    .selected-item {
-        outline: 2px solid red;
-        outline-offset: 2px;
-    }
-    .selected-image img {
-        outline: 2px solid red;
-        outline-offset: 2px;
-    }
-    .loading-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: rgba(0, 0, 0, 0.5); /* fundo escuro semi-transparente */
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999; /* garante que fique acima de tudo */
-    }
-
-    .loading-box {
-        background: white;
-        padding: 20px 40px;
-        border-radius: 10px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        color: #333;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    .spinner {
-        width: 20px;
-        height: 20px;
-        border: 3px solid #ccc;
-        border-top-color: #007bff;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-        to { transform: rotate(360deg); }
-    }
-
-.lightbox-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-}
-
-.lightbox-content {
-    position: relative;
-    max-width: 90vw;
-    max-height: 90vh;
-}
-
-.lightbox-image {
-    max-width: 90vw;
-    max-height: 90vh;
-    object-fit: contain;
-    border-radius: 5px;
-}
-
-.lightbox-close {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: rgba(255, 255, 255, 0.8);
-    border: none;
-    font-size: 1.5rem;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #333;
-    transition: background 0.2s;
-}
-
-.lightbox-close:hover {
-    background: rgba(255, 255, 255, 1);
-}
-</style>
