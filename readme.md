@@ -1,11 +1,18 @@
-## Checklist todo
+# Lista de Tarefas com Imagens
 
-- [x] Corrigir bug de poder colocar uma task vazia em uma task com imagens como se fosse uma imagem
-- [x] Editar task (título e imagens, arrumar pra quando editar, poder deletar a imagem)
-- [x] Drag and drop de tasks e imagens (organização)
-      (fazer para que o deletar tasks selecionadas e o deletar imagens nao aparecer, somente aparecer quando
-       eu der dois cliques nas tasks/imagens, e inclusive, retirar todos os checkboxes e substituir por dois cliques
-       na task/imagem. fazer também para conseguir desselecionar a imagem antes de criar)
-- [x] Colocar a estilização em um arquivo `styles.css`
-- [x] Estilizar
-- [ ] Fazer o readme de "instalação" do projeto
+Aplicação de tarefas com upload de imagens, drag and drop e modo de seleção.
+
+## Tecnologias
+
+- **Frontend:** Vue 3 + Vuedraggable + Axios
+- **Backend:** Laravel
+
+## Requisitos
+- **PHP** 
+- **Composer** 
+- **Node.Js** 
+
+## Como rodar
+
+### Backend (Laravel)
+
