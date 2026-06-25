@@ -26,21 +26,22 @@ class TaskController extends Controller
             'images.*' => 'image|mimes:jpg,jpeg,png,webp|max:2048'
         ]);
 
-        $lastPosition = (int) Task::max('position') ?? 0;
+        return DB::transaction(function () use ($request) {
+            Task::query()->increment('position');
 
-        $task = Task::create([
-            'title' => $request->title,
-            'done' => false,
-            'position' => $lastPosition + 1
-        ]);
+            $task = Task::create([
+                'title' => $request->title,
+                'done' => false,
+                'position' => 1,
+            ]);
 
-        if ($request->hasFile('images')) {
-            $this->attachImages($task, $request->file('images'));
-        }
+            if ($request->hasFile('images')) {
+                $this->attachImages($task, $request->file('images'));
+            }
 
-        return response()->json($task->load('images'), 201);
-    }
-
+            return response()->json($task->load('images'), 201);
+        });
+}
     public function update(Request $request, $id)
     {
         $request->validate([
