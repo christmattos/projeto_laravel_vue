@@ -29,7 +29,7 @@ composer install
 copy .env.example .env
 # ou no Linux/Mac: cp .env.example .env
 php artisan key:generate
-type nul > database\database.sqlite   (Windows)
+type nul > database\database.sqlite
 # ou no Linux/Mac: touch database/database.sqlite
 php artisan migrate
 php artisan storage:link
