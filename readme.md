@@ -35,7 +35,7 @@ php artisan migrate
 php artisan storage:link
 ```
 
-## 3 - Configuração do backend
+## 3 - Configuração do frontend
 ```bash
 cd frontend
 npm install
