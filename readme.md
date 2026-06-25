@@ -18,7 +18,7 @@ Aplicação de tarefas com upload de imagens, drag and drop e modo de seleção.
 ## 1 - Clonar o repositório:
 
 ```bash
-git clone <url-do-repositorio>
+git clone https://github.com/christmattos/projeto_laravel_vue.git
 cd projeto_laravel_vue
 ```
 
