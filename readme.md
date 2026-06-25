@@ -31,6 +31,7 @@ copy .env.example .env
 php artisan key:generate
 type nul > database\database.sqlite   (Windows)
 # ou no Linux/Mac: touch database/database.sqlite
+php artisan migrate
 ```
 
 ## 3 - Configuração do backend
